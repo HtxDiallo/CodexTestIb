@@ -1,0 +1,8 @@
+node_modules/
+.next/
+deploy/release-stage/
+deploy/*.tgz
+deploy/*.tar.gz
+.env
+.env.local
+npm-debug.log*

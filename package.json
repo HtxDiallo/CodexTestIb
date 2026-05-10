@@ -1,0 +1,23 @@
+{
+  "name": "nom-du-vps-vps-eb0c35d2-vps",
+  "version": "1.0.0",
+  "description": "Application web de gestion des vouchers FreeRADIUS pour portails captifs pfSense.",
+  "main": "next.config.mjs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
+    "lint": "next lint"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "lucide-react": "^1.14.0",
+    "mysql2": "^3.22.3",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  }
+}
