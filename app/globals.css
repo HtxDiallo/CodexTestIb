@@ -662,6 +662,12 @@ td {
   color: #43536b;
 }
 
+.bulkResultsTable {
+  max-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
 .serverBars {
   padding: 18px;
   display: grid;

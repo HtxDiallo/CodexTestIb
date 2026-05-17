@@ -62,6 +62,20 @@ function bandwidthLabel(kbps) {
   return value > 0 ? `${value} kbit/s` : "Illimité";
 }
 
+function voucherStatusLabel(status) {
+  if (status === "active") return "Actif";
+  if (status === "revoked") return "Révoqué";
+  if (status === "expired") return "Expiré";
+  if (status === "missing") return "Absent";
+  return status;
+}
+
+function voucherStatusTone(status) {
+  if (status === "active") return "green";
+  if (status === "missing" || status === "revoked") return "red";
+  return "muted";
+}
+
 function futureDatetimeLocal(hours = 24) {
   const date = new Date(Date.now() + hours * 60 * 60 * 1000);
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
@@ -1135,14 +1149,31 @@ function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, 
             <button className="ghostButton dangerText" onClick={() => runBulkVoucherAction("delete")}><Trash2 size={16} />Supprimer</button>
           </div>
           {bulkResult && (
-            <div className="summaryGrid">
-              <span>Demandes <strong>{bulkResult.requested}</strong></span>
-              <span>Trouves <strong>{bulkResult.found}</strong></span>
-              <span>Actifs <strong>{bulkResult.active}</strong></span>
-              <span>Revoques <strong>{bulkResult.revoked}</strong></span>
-              <span>Expires <strong>{bulkResult.expired}</strong></span>
-              <span>Absents <strong>{bulkResult.missing}</strong></span>
-            </div>
+            <>
+              <div className="summaryGrid">
+                <span>Demandes <strong>{bulkResult.requested}</strong></span>
+                <span>Trouves <strong>{bulkResult.found}</strong></span>
+                <span>Actifs <strong>{bulkResult.active}</strong></span>
+                <span>Revoques <strong>{bulkResult.revoked}</strong></span>
+                <span>Expires <strong>{bulkResult.expired}</strong></span>
+                <span>Absents <strong>{bulkResult.missing}</strong></span>
+              </div>
+              {bulkResult.action === "test" && (
+                <div className="tableWrap bulkResultsTable">
+                  <table>
+                    <thead><tr><th>Code</th><th>Résultat</th></tr></thead>
+                    <tbody>
+                      {bulkResult.items.map((item) => (
+                        <tr key={item.code}>
+                          <td><strong>{item.code}</strong></td>
+                          <td><Badge tone={voucherStatusTone(item.status)}>{voucherStatusLabel(item.status)}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Panel>
