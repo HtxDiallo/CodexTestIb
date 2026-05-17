@@ -76,6 +76,20 @@ function voucherStatusTone(status) {
   return "muted";
 }
 
+function importStatusLabel(status) {
+  if (status === "imported") return "Importé";
+  if (status === "existing") return "Déjà existant";
+  if (status === "invalid") return "Invalide";
+  if (status === "duplicate_input") return "Doublon fichier";
+  return status;
+}
+
+function importStatusTone(status) {
+  if (status === "imported") return "green";
+  if (status === "existing") return "blue";
+  return "red";
+}
+
 function futureDatetimeLocal(hours = 24) {
   const date = new Date(Date.now() + hours * 60 * 60 * 1000);
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
@@ -107,6 +121,8 @@ export default function Home() {
   const [batchForm, setBatchForm] = useState({ name: "", quantity: 50, duration: 1440, pfsenseId: "all" });
   const [bulkCodes, setBulkCodes] = useState("");
   const [bulkResult, setBulkResult] = useState(null);
+  const [importForm, setImportForm] = useState({ name: "", duration: 1440, pfsenseId: "all", codes: "" });
+  const [importResult, setImportResult] = useState(null);
   const [macDeviceForm, setMacDeviceForm] = useState({ label: "", macAddress: "", expiresAt: futureDatetimeLocal(), pfsenseId: "all" });
 
   function applySnapshot(snapshot) {
@@ -462,6 +478,28 @@ export default function Home() {
     }
   }
 
+  async function importVoucherBackup(event) {
+    event.preventDefault();
+    try {
+      const payload = await callApi("/api/vouchers/import", {
+        method: "POST",
+        body: JSON.stringify(importForm)
+      });
+      setImportResult(payload.importResult);
+      notify(`${payload.importResult.imported} voucher(s) importe(s), ${payload.importResult.existing} deja existant(s).`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function loadImportFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    setImportForm((current) => ({ ...current, codes: text }));
+    notify(`Fichier ${file.name} charge pour import.`);
+  }
+
   async function addMacDevice(event) {
     event.preventDefault();
     try {
@@ -622,6 +660,11 @@ export default function Home() {
               setBulkCodes={setBulkCodes}
               bulkResult={bulkResult}
               runBulkVoucherAction={runBulkVoucherAction}
+              importForm={importForm}
+              setImportForm={setImportForm}
+              importResult={importResult}
+              importVoucherBackup={importVoucherBackup}
+              loadImportFile={loadImportFile}
             />
           )}
           {activeView === "mac-devices" && (
@@ -1107,7 +1150,7 @@ function NasView({ nasServers, servers }) {
   );
 }
 
-function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, batchForm, setBatchForm, addVoucher, addBatch, toggleVoucher, deleteBatch, exportCsv, exportBatchCsv, bulkCodes, setBulkCodes, bulkResult, runBulkVoucherAction }) {
+function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, batchForm, setBatchForm, addVoucher, addBatch, toggleVoucher, deleteBatch, exportCsv, exportBatchCsv, bulkCodes, setBulkCodes, bulkResult, runBulkVoucherAction, importForm, setImportForm, importResult, importVoucherBackup, loadImportFile }) {
   return (
     <section className="splitView">
       <Panel title="CRÉER UN VOUCHER" tone="green">
@@ -1176,6 +1219,48 @@ function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, 
             </>
           )}
         </div>
+      </Panel>
+      <Panel title="IMPORTER UN BACKUP" tone="blue">
+        <form className="importPanel" onSubmit={importVoucherBackup}>
+          <div className="formGrid compactGrid">
+            <label>Nom du lot<input value={importForm.name} onChange={(event) => setImportForm({ ...importForm, name: event.target.value })} placeholder="IMPORT_BACKUP_MAI" /></label>
+            <label>Durée (min)<input type="number" min="1" value={importForm.duration} onChange={(event) => setImportForm({ ...importForm, duration: event.target.value })} /></label>
+            <label>pfSense<select value={importForm.pfsenseId} onChange={(event) => setImportForm({ ...importForm, pfsenseId: event.target.value })}><option value="all">Tous</option>{servers.map((server) => <option key={server.id} value={server.id}>{server.name}</option>)}</select></label>
+            <label>Fichier CSV<input type="file" accept=".csv,text/csv,text/plain" onChange={loadImportFile} /></label>
+          </div>
+          <label className="stackedLabel">
+            Liste à restaurer
+            <textarea value={importForm.codes} onChange={(event) => setImportForm({ ...importForm, codes: event.target.value })} placeholder={"AGE8S9\nAB12CD\nZX9KLM"} />
+          </label>
+          <div className="buttonRow">
+            <button className="primaryButton"><UploadCloud size={16} />Importer</button>
+          </div>
+          {importResult && (
+            <>
+              <div className="summaryGrid">
+                <span>Demandes <strong>{importResult.requested}</strong></span>
+                <span>Uniques <strong>{importResult.unique}</strong></span>
+                <span>Importés <strong>{importResult.imported}</strong></span>
+                <span>Existants <strong>{importResult.existing}</strong></span>
+                <span>Invalides <strong>{importResult.invalid}</strong></span>
+                <span>Doublons fichier <strong>{importResult.duplicateInput}</strong></span>
+              </div>
+              <div className="tableWrap bulkResultsTable">
+                <table>
+                  <thead><tr><th>Code</th><th>Résultat</th></tr></thead>
+                  <tbody>
+                    {importResult.items.map((item, index) => (
+                      <tr key={`${item.code}-${item.status}-${index}`}>
+                        <td><strong>{item.code}</strong></td>
+                        <td><Badge tone={importStatusTone(item.status)}>{importStatusLabel(item.status)}</Badge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </form>
       </Panel>
       <Panel title="RECHERCHER / RÉVOQUER / RESTAURER" tone="green">
         <div className="tableWrap">

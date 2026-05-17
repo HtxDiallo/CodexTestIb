@@ -636,12 +636,23 @@ td {
   gap: 16px;
 }
 
-.bulkPanel label {
+.bulkPanel label,
+.stackedLabel {
   display: grid;
   gap: 8px;
   color: #1d2a3b;
   font-size: 13px;
   font-weight: 800;
+}
+
+.importPanel {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.compactGrid {
+  padding: 0;
 }
 
 .summaryGrid {
