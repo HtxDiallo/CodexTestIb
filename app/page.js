@@ -29,6 +29,7 @@ import {
   Server,
   Settings,
   Shield,
+  Smartphone,
   Trash2,
   UploadCloud,
   Users,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 import {
   initialAccounting,
+  initialMacDevices,
   initialNasServers,
   initialPfSenseServers,
   initialVoucherBatches,
@@ -60,6 +62,12 @@ function bandwidthLabel(kbps) {
   return value > 0 ? `${value} kbit/s` : "Illimité";
 }
 
+function futureDatetimeLocal(hours = 24) {
+  const date = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+  return localDate.toISOString().slice(0, 16);
+}
+
 const VOUCHER_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
 const MAX_BATCH_QUANTITY = 30000;
 
@@ -76,12 +84,16 @@ export default function Home() {
   const [batches, setBatches] = useState(initialVoucherBatches);
   const [vouchers, setVouchers] = useState(initialVouchers);
   const [accounting, setAccounting] = useState(initialAccounting);
+  const [macDevices, setMacDevices] = useState(initialMacDevices);
   const [selectedPfSense, setSelectedPfSense] = useState("pfs-1");
   const [voucherQuery, setVoucherQuery] = useState("A1B2-C3D4-E5F6");
   const [toast, setToast] = useState("Interface prête à brancher sur FreeRADIUS SQL");
   const [pfSenseForm, setPfSenseForm] = useState({ name: "", ip: "", radiusSecret: "" });
   const [voucherForm, setVoucherForm] = useState({ code: "", duration: 1440, uploadKbps: 0, downloadKbps: 0, pfsenseId: "all" });
   const [batchForm, setBatchForm] = useState({ name: "", quantity: 50, duration: 1440, pfsenseId: "all" });
+  const [bulkCodes, setBulkCodes] = useState("");
+  const [bulkResult, setBulkResult] = useState(null);
+  const [macDeviceForm, setMacDeviceForm] = useState({ label: "", macAddress: "", expiresAt: futureDatetimeLocal(), pfsenseId: "all" });
 
   function applySnapshot(snapshot) {
     if (snapshot.pfSenseServers) setPfSenseServers(snapshot.pfSenseServers);
@@ -89,6 +101,7 @@ export default function Home() {
     if (snapshot.batches) setBatches(snapshot.batches);
     if (snapshot.vouchers) setVouchers(snapshot.vouchers);
     if (snapshot.accounting) setAccounting(snapshot.accounting);
+    if (snapshot.macDevices) setMacDevices(snapshot.macDevices);
     if (snapshot.pfSenseServers?.length && !snapshot.pfSenseServers.some((server) => server.id === selectedPfSense)) {
       setSelectedPfSense(snapshot.pfSenseServers[0].id);
     }
@@ -411,6 +424,70 @@ export default function Home() {
     notify("Lot supprimé avec ses vouchers.");
   }
 
+  async function runBulkVoucherAction(action, { batchId = null, codes = bulkCodes } = {}) {
+    const destructive = action === "revoke" || action === "delete";
+    if (destructive && !window.confirm(action === "delete" ? "Supprimer definitivement les vouchers selectionnes ?" : "Revoquer les vouchers selectionnes ?")) {
+      return;
+    }
+    try {
+      const payload = await callApi("/api/vouchers/bulk", {
+        method: "POST",
+        body: JSON.stringify({ action, batchId, codes })
+      });
+      setBulkResult(payload.bulkResult);
+      const result = payload.bulkResult;
+      if (action === "test") {
+        notify(`${result.found} voucher(s) trouve(s), ${result.active} actif(s), ${result.missing} absent(s).`);
+      } else if (action === "revoke") {
+        notify(`${result.found} voucher(s) revoque(s).`);
+      } else {
+        notify(`${result.found} voucher(s) supprime(s).`);
+      }
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function addMacDevice(event) {
+    event.preventDefault();
+    try {
+      await callApi("/api/mac-devices", {
+        method: "POST",
+        body: JSON.stringify(macDeviceForm)
+      });
+      setMacDeviceForm({ label: "", macAddress: "", expiresAt: futureDatetimeLocal(), pfsenseId: "all" });
+      notify("Appareil MAC ajoute avec expiration automatique.");
+      return;
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function toggleMacDevice(id) {
+    try {
+      await callApi("/api/mac-devices", {
+        method: "PATCH",
+        body: JSON.stringify({ id })
+      });
+      notify("Statut de l'appareil MAC mis a jour.");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function deleteMacDevice(id) {
+    if (!window.confirm("Supprimer cet appareil MAC ?")) return;
+    try {
+      await callApi("/api/mac-devices/delete", {
+        method: "POST",
+        body: JSON.stringify({ id })
+      });
+      notify("Appareil MAC supprime.");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
   function disconnectSession(id) {
     setAccounting((current) =>
       current.map((item) => (item.id === id ? { ...item, status: "closed", endedAt: "maintenant" } : item))
@@ -489,6 +566,7 @@ export default function Home() {
               filteredVouchers={filteredVouchers}
               toggleVoucher={toggleVoucher}
               deleteBatch={deleteBatch}
+              runBulkVoucherAction={runBulkVoucherAction}
               exportCsv={exportCsv}
               exportBatchCsv={exportBatchCsv}
               setSelectedPfSense={setSelectedPfSense}
@@ -526,6 +604,21 @@ export default function Home() {
               deleteBatch={deleteBatch}
               exportCsv={exportCsv}
               exportBatchCsv={exportBatchCsv}
+              bulkCodes={bulkCodes}
+              setBulkCodes={setBulkCodes}
+              bulkResult={bulkResult}
+              runBulkVoucherAction={runBulkVoucherAction}
+            />
+          )}
+          {activeView === "mac-devices" && (
+            <MacDevicesView
+              servers={pfSenseServers}
+              devices={macDevices}
+              form={macDeviceForm}
+              setForm={setMacDeviceForm}
+              addMacDevice={addMacDevice}
+              toggleMacDevice={toggleMacDevice}
+              deleteMacDevice={deleteMacDevice}
             />
           )}
           {activeView === "connections" && (
@@ -546,6 +639,7 @@ function Sidebar({ activeView, setActiveView }) {
     ["pfsense", Radio, "Serveurs pfSense"],
     ["nas", Server, "NAS (RADIUS Clients)"],
     ["vouchers", KeyRound, "Vouchers"],
+    ["mac-devices", Smartphone, "Appareils MAC"],
     ["connections", Wifi, "Connexions / Logs"],
     ["reports", BarChart3, "Rapports"],
     ["api", Network, "API & Intégration"],
@@ -639,6 +733,7 @@ function Dashboard(props) {
     deleteBatch,
     exportCsv,
     exportBatchCsv,
+    runBulkVoucherAction,
     setSelectedPfSense,
     togglePfSense,
     deletePfSense,
@@ -784,6 +879,12 @@ function Dashboard(props) {
                       </button>
                       <button className="iconOnly" title="Exporter le lot" aria-label={`Exporter le lot ${batch.name}`} onClick={() => exportBatchCsv(batch.id)}>
                         <FileDown size={16} />
+                      </button>
+                      <button className="iconOnly" title="Tester le lot" aria-label={`Tester le lot ${batch.name}`} onClick={() => runBulkVoucherAction("test", { batchId: batch.id })}>
+                        <Search size={16} />
+                      </button>
+                      <button className="iconOnly danger" title="Revoquer le lot" aria-label={`Revoquer le lot ${batch.name}`} onClick={() => runBulkVoucherAction("revoke", { batchId: batch.id })}>
+                        <LockKeyhole size={16} />
                       </button>
                       <button className="iconOnly danger" title="Supprimer le lot" aria-label={`Supprimer le lot ${batch.name}`} onClick={() => deleteBatch(batch.id)}>
                         <Trash2 size={16} />
@@ -992,7 +1093,7 @@ function NasView({ nasServers, servers }) {
   );
 }
 
-function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, batchForm, setBatchForm, addVoucher, addBatch, toggleVoucher, deleteBatch, exportCsv, exportBatchCsv }) {
+function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, batchForm, setBatchForm, addVoucher, addBatch, toggleVoucher, deleteBatch, exportCsv, exportBatchCsv, bulkCodes, setBulkCodes, bulkResult, runBulkVoucherAction }) {
   return (
     <section className="splitView">
       <Panel title="CRÉER UN VOUCHER" tone="green">
@@ -1018,8 +1119,31 @@ function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, 
         <div className="tableWrap">
           <table>
             <thead><tr><th>Lot</th><th>Nombre</th><th>Durée</th><th>pfSense</th><th>Actions</th></tr></thead>
-            <tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.name}</strong></td><td>{batch.quantity}</td><td>{batch.duration}</td><td>{servers.find((server) => server.id === batch.pfsenseId)?.name ?? "Tous"}</td><td className="rowActions"><button className="iconOnly" title="Exporter le lot" aria-label={`Exporter le lot ${batch.name}`} onClick={() => exportBatchCsv(batch.id)}><FileDown size={16} /></button><button className="iconOnly danger" title="Supprimer le lot" aria-label={`Supprimer le lot ${batch.name}`} onClick={() => deleteBatch(batch.id)}><Trash2 size={16} /></button></td></tr>)}</tbody>
+            <tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.name}</strong></td><td>{batch.quantity}</td><td>{batch.duration}</td><td>{servers.find((server) => server.id === batch.pfsenseId)?.name ?? "Tous"}</td><td className="rowActions"><button className="iconOnly" title="Tester le lot" aria-label={`Tester le lot ${batch.name}`} onClick={() => runBulkVoucherAction("test", { batchId: batch.id })}><Search size={16} /></button><button className="iconOnly danger" title="Revoquer le lot" aria-label={`Revoquer le lot ${batch.name}`} onClick={() => runBulkVoucherAction("revoke", { batchId: batch.id })}><LockKeyhole size={16} /></button><button className="iconOnly" title="Exporter le lot" aria-label={`Exporter le lot ${batch.name}`} onClick={() => exportBatchCsv(batch.id)}><FileDown size={16} /></button><button className="iconOnly danger" title="Supprimer le lot" aria-label={`Supprimer le lot ${batch.name}`} onClick={() => deleteBatch(batch.id)}><Trash2 size={16} /></button></td></tr>)}</tbody>
           </table>
+        </div>
+      </Panel>
+      <Panel title="TRAITEMENT EN MASSE" tone="green">
+        <div className="bulkPanel">
+          <label>
+            Liste de codes
+            <textarea value={bulkCodes} onChange={(event) => setBulkCodes(event.target.value)} placeholder={"AGE8S9\nAB12CD\nZX9KLM"} />
+          </label>
+          <div className="buttonRow">
+            <button className="successButton" onClick={() => runBulkVoucherAction("test")}><Search size={16} />Tester</button>
+            <button className="ghostButton dangerText" onClick={() => runBulkVoucherAction("revoke")}><LockKeyhole size={16} />Revoquer</button>
+            <button className="ghostButton dangerText" onClick={() => runBulkVoucherAction("delete")}><Trash2 size={16} />Supprimer</button>
+          </div>
+          {bulkResult && (
+            <div className="summaryGrid">
+              <span>Demandes <strong>{bulkResult.requested}</strong></span>
+              <span>Trouves <strong>{bulkResult.found}</strong></span>
+              <span>Actifs <strong>{bulkResult.active}</strong></span>
+              <span>Revoques <strong>{bulkResult.revoked}</strong></span>
+              <span>Expires <strong>{bulkResult.expired}</strong></span>
+              <span>Absents <strong>{bulkResult.missing}</strong></span>
+            </div>
+          )}
         </div>
       </Panel>
       <Panel title="RECHERCHER / RÉVOQUER / RESTAURER" tone="green">
@@ -1029,6 +1153,31 @@ function VoucherView({ servers, vouchers, batches, voucherForm, setVoucherForm, 
             <tbody>{vouchers.slice(0, 12).map((voucher) => <tr key={voucher.id}><td><strong>{voucher.code}</strong></td><td>{voucher.duration}</td><td>{voucher.remaining}</td><td><Badge tone={voucher.status === "active" ? "green" : "red"}>{voucher.status}</Badge></td><td>{servers.find((server) => server.id === voucher.pfsenseId)?.name ?? "Tous"}</td><td><button className={voucher.status === "active" ? "ghostButton dangerText" : "successButton"} onClick={() => toggleVoucher(voucher.id)}>{voucher.status === "active" ? "Révoquer" : "Restaurer"}</button></td></tr>)}</tbody>
           </table>
         </div>
+      </Panel>
+    </section>
+  );
+}
+
+function MacDevicesView({ servers, devices, form, setForm, addMacDevice, toggleMacDevice, deleteMacDevice }) {
+  return (
+    <section className="splitView">
+      <Panel title="CONNECTER UN APPAREIL MAC" tone="green">
+        <form className="formGrid" onSubmit={addMacDevice}>
+          <label>Nom<input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="Tablette caisse" /></label>
+          <label>Adresse MAC<input value={form.macAddress} onChange={(event) => setForm({ ...form, macAddress: event.target.value })} placeholder="00:11:22:33:44:55" /></label>
+          <label>Date de fin<input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} /></label>
+          <label>pfSense<select value={form.pfsenseId} onChange={(event) => setForm({ ...form, pfsenseId: event.target.value })}><option value="all">Tous</option>{servers.map((server) => <option key={server.id} value={server.id}>{server.name}</option>)}</select></label>
+          <button className="successButton"><Plus size={16} />Ajouter</button>
+        </form>
+      </Panel>
+      <Panel title="APPAREILS MAC" tone="blue">
+        <div className="tableWrap">
+          <table>
+            <thead><tr><th>Nom</th><th>Adresse MAC</th><th>pfSense</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+            <tbody>{devices.map((device) => <tr key={device.id}><td><strong>{device.label}</strong></td><td>{device.macAddress}</td><td>{servers.find((server) => server.id === device.pfsenseId)?.name ?? "Tous"}</td><td>{device.expiresAt}</td><td><Badge tone={device.status === "active" ? "green" : device.status === "expired" ? "muted" : "red"}>{device.status}</Badge></td><td className="rowActions">{device.status !== "expired" && <button className={device.status === "active" ? "iconOnly danger" : "iconOnly"} title={device.status === "active" ? "Revoquer" : "Restaurer"} aria-label={`${device.status === "active" ? "Revoquer" : "Restaurer"} ${device.label}`} onClick={() => toggleMacDevice(device.id)}><LockKeyhole size={16} /></button>}<button className="iconOnly danger" title="Supprimer" aria-label={`Supprimer ${device.label}`} onClick={() => deleteMacDevice(device.id)}><Trash2 size={16} /></button></td></tr>)}</tbody>
+          </table>
+        </div>
+        {devices.length === 0 && <p className="panelFoot">Aucun appareil MAC enregistre.</p>}
       </Panel>
     </section>
   );

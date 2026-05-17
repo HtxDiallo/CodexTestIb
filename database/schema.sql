@@ -62,6 +62,21 @@ CREATE INDEX IF NOT EXISTS idx_vouchers_code ON vouchers(code);
 CREATE INDEX IF NOT EXISTS idx_vouchers_status ON vouchers(status);
 CREATE INDEX IF NOT EXISTS idx_vouchers_batch_id ON vouchers(batch_id);
 
+CREATE TABLE IF NOT EXISTS mac_devices (
+  id BIGSERIAL PRIMARY KEY,
+  label VARCHAR(120) NOT NULL,
+  mac_address VARCHAR(17) UNIQUE NOT NULL,
+  allowed_nas_server_id BIGINT REFERENCES nas_servers(id),
+  expires_at TIMESTAMP NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  revoked_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mac_devices_mac_address ON mac_devices(mac_address);
+CREATE INDEX IF NOT EXISTS idx_mac_devices_expires_at ON mac_devices(expires_at);
+
 CREATE TABLE IF NOT EXISTS admin_logs (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT REFERENCES users(id),

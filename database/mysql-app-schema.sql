@@ -33,6 +33,21 @@ CREATE TABLE IF NOT EXISTS vouchers (
   INDEX idx_vouchers_nas_id (nas_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS mac_devices (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  label VARCHAR(120) NOT NULL,
+  mac_address VARCHAR(17) NOT NULL UNIQUE,
+  nas_id INT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  status ENUM('active','revoked') NOT NULL DEFAULT 'active',
+  revoked_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_mac_devices_mac_address (mac_address),
+  INDEX idx_mac_devices_nas_id (nas_id),
+  INDEX idx_mac_devices_expires_at (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS admin_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NULL,
